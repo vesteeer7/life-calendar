@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Life Calendar</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{color-scheme:dark;--bg:#0c0c14;--card:#161624;--b:#27273d;--t:#ececf6;--m:#8b8ba8;--p:#8b5cf6;--bl:#3b82f6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:15px/1.4 system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit;background:#1d1d30;border:1px solid var(--b);border-radius:10px;padding:9px 12px;transition:.15s}
+button{cursor:pointer}button:hover{border-color:var(--p)}button.pri{background:linear-gradient(135deg,var(--p),var(--bl));border:0;font-weight:600}
+input,select,textarea{width:100%;margin:4px 0}input[type=checkbox]{width:auto}textarea{min-height:70px}
+.box{max-width:340px;margin:12vh auto;padding:24px;background:var(--card);border:1px solid var(--b);border-radius:18px}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,0px));border-bottom:1px solid var(--b)}
+header b{margin-right:auto;font-size:18px;background:linear-gradient(90deg,var(--p),var(--bl));-webkit-background-clip:text;background-clip:text;color:transparent}
+nav{display:flex;gap:6px;overflow-x:auto;width:100%}nav button.on{background:var(--p);border-color:var(--p)}
+main{max-width:900px;margin:0 auto;padding:16px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}.row>*{flex:1}.row button{flex:0}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.dh{text-align:center;color:var(--m);font-size:12px}
+.day{min-height:64px;background:var(--card);border:1px solid var(--b);border-radius:12px;padding:6px;cursor:pointer;transition:.15s}
+.day:hover{border-color:var(--p);transform:translateY(-2px)}.day.today{border-color:var(--bl);box-shadow:0 0 0 1px var(--bl)}
+.dots{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px}.dots i{width:8px;height:8px;border-radius:50%}
+.chip{display:inline-block;padding:4px 10px;border-radius:99px;background:var(--card);border:1px solid var(--b);margin:3px 3px 0 0}
+.ev,.card{background:var(--card);border:1px solid var(--b);border-radius:14px;padding:12px;margin:8px 0}.ev p{margin:6px 0;white-space:pre-wrap}
+small,.m{color:var(--m)}.cm{padding:4px 0;border-top:1px solid var(--b);font-size:14px}.cm a{cursor:pointer;color:var(--m)}
+#mo .ov{position:fixed;inset:0;background:#000a;display:flex;align-items:flex-end;justify-content:center;z-index:9;animation:f .2s}
+.md{background:var(--bg);border:1px solid var(--b);border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:88vh;overflow:auto;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));animation:u .2s}
+@media(min-width:600px){#mo .ov{align-items:center}.md{border-radius:20px}.day{min-height:84px}}
+@keyframes f{from{opacity:0}}@keyframes u{from{transform:translateY(30px)}}
+#t{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--p);padding:10px 16px;border-radius:12px;z-index:99;display:none}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body>
+<div id="auth" class="box"><h2 style="margin-top:0">Life Calendar</h2>
+<input id="l" placeholder="Логин (a-z, 0-9, _)" autocomplete="username"><input id="p" type="password" placeholder="Пароль (от 6 символов)" autocomplete="current-password">
+<div class="row"><button class="pri" onclick="auth(0)">Войти</button><button onclick="auth(1)">Регистрация</button></div></div>
+<div id="app" hidden><header><b>Life Calendar</b><button onclick="sb.auth.signOut()">Выйти</button>
+<nav id="nav"></nav></header><main id="main"></main></div><div id="mo"></div><div id="t"></div>
+<script>
+const SUPABASE_URL='https://qokrqyandvbadudlrzqo.supabase.co', SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFva3JxeWFuZHZiYWR1ZGxyenFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzMDA0MzksImV4cCI6MjEwODg3NjQzOX0.Kh4ZXKZKTHXU9Y1xjLvKf9G_t6kNv-7tsA7mYmUao6c';
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const C={holiday:['🎉','Праздник','#22c55e'],birthday:['🎂','День рождения','#ec4899'],drink:['🍻','Алкоголь','#f97316'],event:['📅','Событие','#3b82f6'],special:['⭐','Особая дата','#eab308'],note:['📝','Заметка','#8b5cf6']};
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const toast=m=>{const t=$('#t');t.textContent=m;t.style.display='block';clearTimeout(t.h);t.h=setTimeout(()=>t.style.display='none',3500)};
+const T={cal:'Календарь',feed:'Лента',find:'Поиск',people:'Участники',cnt:'Счётчик'};
+let S={me:null,prof:{},ev:[],cm:[],m:new Date(new Date().getFullYear(),new Date().getMonth(),1),tab:'cal',fc:'',fu:'',q:'',day:null,ch:null};
+const nick=id=>S.prof[id]?.nickname||'?', adm=()=>S.prof[S.me.id]?.is_admin;
+const fe=()=>S.ev.filter(e=>(!S.fc||e.category==S.fc)&&(!S.fu||e.user_id==S.fu));
+
+async function auth(reg){
+  const l=$('#l').value.trim().toLowerCase(),p=$('#p').value;
+  if(!/^[a-z0-9_]{3,20}$/.test(l))return toast('Логин: 3–20 символов, a-z, 0-9, _');
+  const email=l+'@lifecal.app';
+  const r=reg?await sb.auth.signUp({email,password:p,options:{data:{nickname:l}}}):await sb.auth.signInWithPassword({email,password:p});
+  if(r.error)toast(r.error.message);
+}
+sb.auth.onAuthStateChange((_,s)=>{
+  S.me=s?.user||null;$('#auth').hidden=!!S.me;$('#app').hidden=!S.me;
+  if(S.me){load();if(!S.ch)S.ch=sb.channel('rt').on('postgres_changes',{event:'*',schema:'public'},()=>load(1)).subscribe()}
+  else if(S.ch){sb.removeChannel(S.ch);S.ch=null}
+});
+async function load(rt){
+  const[a,b,c]=await Promise.all([sb.from('profiles').select('*'),sb.from('events').select('*').order('date'),sb.from('comments').select('*').order('created_at')]);
+  S.prof=Object.fromEntries((a.data||[]).map(x=>[x.id,x]));S.ev=b.data||[];S.cm=c.data||[];
+  if(rt&&document.activeElement?.matches('input,textarea,select'))return;
+  render();if(S.day&&$('#mo .md')&&!$('#ft'))openDay(S.day);
+}
+function render(){
+  $('#nav').innerHTML=Object.entries(T).map(([k,v])=>`<button class="${S.tab==k?'on':''}" onclick="S.tab='${k}';render()">${v}</button>`).join('');
+  $('#main').innerHTML=({cal:vCal,feed:vFeed,find:vFind,people:vPeople,cnt:vCnt})[S.tab]();
+  if(S.tab=='find')res();
+}
+function vCal(){
+  const y=S.m.getFullYear(),m=S.m.getMonth(),n=new Date(y,m+1,0).getDate(),off=(new Date(y,m,1).getDay()+6)%7,ev=fe();
+  let g=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d=>`<div class=dh>${d}</div>`).join('')+'<div></div>'.repeat(off);
+  for(let d=1;d<=n;d++){const k=iso(new Date(y,m,d)),es=ev.filter(e=>e.date==k);
+    g+=`<div class="day${k==iso(new Date())?' today':''}" onclick="openDay('${k}')"><span>${d}</span><div class=dots>${es.slice(0,5).map(e=>`<i style="background:${C[e.category][2]}"></i>`).join('')}${es.length>5?'<small>+</small>':''}</div></div>`}
+  const mv=ev.filter(e=>e.date.startsWith(iso(S.m).slice(0,7)));
+  return `<div class=row><button onclick="mv(-1)">‹</button><h2 style="text-align:center;margin:0">${S.m.toLocaleDateString('ru',{month:'long',year:'numeric'})}</h2><button onclick="mv(1)">›</button></div>
+  <div class=row><select onchange="S.fc=this.value;render()"><option value="">Все категории</option>${Object.entries(C).map(([k,c])=>`<option value=${k} ${S.fc==k?'selected':''}>${c[0]} ${c[1]}</option>`).join('')}</select>
+  <select onchange="S.fu=this.value;render()"><option value="">Все участники</option>${Object.values(S.prof).map(p=>`<option value=${p.id} ${S.fu==p.id?'selected':''}>${esc(p.nickname)}</option>`).join('')}</select></div>
+  <div class=grid>${g}</div>
+  <div class=card><b>За месяц: ${mv.length}</b><br>${Object.entries(C).map(([k,c])=>`<span class=chip style="border-color:${c[2]}">${c[0]} ${mv.filter(e=>e.category==k).length}</span>`).join('')}</div>`;
+}
+const mv=d=>{S.m=new Date(S.m.getFullYear(),S.m.getMonth()+d,1);render()};
+const evLine=e=>`<div class=ev style="border-left:4px solid ${C[e.category][2]}" onclick="openDay('${e.date}')">${C[e.category][0]} <b>${esc(e.title)}</b>${e.is_private?' 🔒':''}<br><small>${esc(nick(e.user_id))} · ${e.date}</small></div>`;
+const vFeed=()=>'<h3>Последние добавленные</h3>'+([...S.ev].sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,25).map(evLine).join('')||'<p class=m>Пока пусто. Добавьте первое событие в календаре.</p>');
+const vFind=()=>`<input placeholder="Название, дата (2026-11-05) или ник" value="${esc(S.q)}" oninput="S.q=this.value;res()"><div id=res></div>`;
+function res(){const q=S.q.toLowerCase().trim(),r=q?S.ev.filter(e=>[e.title,e.description,e.date,nick(e.user_id)].some(x=>String(x).toLowerCase().includes(q))):[];
+  $('#res').innerHTML=r.slice(0,50).map(evLine).join('')||`<p class=m>${q?'Ничего не найдено':'Введите запрос'}</p>`}
+function vPeople(){const me=S.prof[S.me.id];
+  return `<div class=card><b>Ваш ник</b><div class=row><input id=nn value="${esc(me?.nickname)}" maxlength=24><button class=pri onclick="setNick()">Сохранить</button></div></div>`+
+  Object.values(S.prof).map(p=>`<div class=card>${esc(p.nickname)} ${p.is_admin?'👑':''}${p.banned?' ⛔ заблокирован':''}<small> · событий: ${S.ev.filter(e=>e.user_id==p.id&&!e.is_private).length}</small>${adm()&&!p.is_admin?`<button style="float:right" onclick="ban('${p.id}',${!p.banned})">${p.banned?'Разблокировать':'Заблокировать'}</button>`:''}</div>`).join('');}
+const vCnt=()=>`<div class=card><b>Сколько дней между датами</b><input type=date id=ca oninput=cnt()><input type=date id=cb oninput=cnt()><h2 id=cr class=m>Выберите две даты</h2></div>`;
+function cnt(){const a=$('#ca').value,b=$('#cb').value;if(a&&b)$('#cr').textContent=Math.abs(Math.round((new Date(b)-new Date(a))/864e5))+' дн.'}
+async function setNick(){const {error}=await sb.from('profiles').update({nickname:$('#nn').value.trim()}).eq('id',S.me.id);error?toast(error.code=='23505'?'Ник занят':'Ник: 2–24 символа'):(toast('Ник изменён'),load())}
+async function ban(id,b){const {error}=await sb.rpc('set_ban',{uid:id,b});error?toast(error.message):load()}
+
+const modal=h=>$('#mo').innerHTML=`<div class=ov onclick="if(event.target==this)closeM()"><div class=md>${h}</div></div>`,closeM=()=>{$('#mo').innerHTML='';S.day=null};
+function openDay(k){S.day=k;const es=fe().filter(e=>e.date==k);
+  modal(`<div class=row><h3 style="margin:0">${new Date(k).toLocaleDateString('ru',{day:'numeric',month:'long',year:'numeric'})}</h3><button onclick="closeM()">✕</button></div>${es.map(evCard).join('')||'<p class=m>В этот день событий нет.</p>'}<button class=pri style="width:100%;margin-top:8px" onclick="form('','${k}')">+ Добавить событие</button>`)}
+function evCard(e){const mine=e.user_id==S.me.id,c=C[e.category];
+  return `<div class=ev style="border-left:4px solid ${c[2]}">${c[0]} <b>${esc(e.title)}</b>${e.is_private?' 🔒':''}<br><small>${c[1]} · ${esc(nick(e.user_id))}</small><p>${esc(e.description)}</p>
+  ${S.cm.filter(x=>x.event_id==e.id).map(x=>`<div class=cm><b>${esc(nick(x.user_id))}:</b> ${esc(x.body)} ${x.user_id==S.me.id||adm()?`<a onclick="delC('${x.id}')">✕</a>`:''}</div>`).join('')}
+  <div class=row><input id="c${e.id}" placeholder="Комментарий" maxlength=500><button onclick="addC('${e.id}')">➤</button>${mine?`<button onclick="form('${e.id}')">✎</button>`:''}${mine||adm()?`<button onclick="delE('${e.id}')">🗑</button>`:''}${adm()&&!mine?`<button onclick="ban('${e.user_id}',true)">⛔</button>`:''}</div></div>`}
+function form(id,date){
+  const e=S.ev.find(x=>x.id==id)||{category:'event',date,title:'',description:'',is_private:false};
+  modal(`<h3>${id?'Редактировать событие':'Новое событие'}</h3><input id=ft placeholder="Название" maxlength=100 value="${esc(e.title)}">
+  <select id=fk>${Object.entries(C).map(([k,c])=>`<option value=${k} ${k==e.category?'selected':''}>${c[0]} ${c[1]}</option>`).join('')}</select>
+  <input id=fd type=date value="${e.date}"><textarea id=fx placeholder="Описание" maxlength=1000>${esc(e.description)}</textarea>
+  <label><input id=fp type=checkbox ${e.is_private?'checked':''}> Скрыть от других (личная запись)</label>
+  <div class=row><button class=pri onclick="save('${id||''}')">Сохранить</button><button onclick="openDay('${e.date}')">Отмена</button></div>`)}
+async function save(id){
+  const v={title:$('#ft').value.trim(),category:$('#fk').value,date:$('#fd').value,description:$('#fx').value.trim(),is_private:$('#fp').checked};
+  if(!v.title||!v.date)return toast('Укажите название и дату');
+  const {error}=id?await sb.from('events').update(v).eq('id',id):await sb.from('events').insert(v);
+  if(error)return toast(error.message);await load();openDay(v.date)}
+async function delE(id){if(!confirm('Удалить это событие? Действие нельзя отменить.'))return;
+  const {error}=await sb.from('events').delete().eq('id',id);error?toast(error.message):(await load(),openDay(S.day))}
+async function addC(id){const body=$('#c'+id).value.trim();if(!body)return;
+  const {error}=await sb.from('comments').insert({event_id:id,body});error?toast(error.message):(await load(),openDay(S.day))}
+async function delC(id){await sb.from('comments').delete().eq('id',id);await load();openDay(S.day)}
+</script></body></html>
